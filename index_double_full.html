@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AZ Kvíz – Double Elimination</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:Arial;background:#eef2f7}
+.area{display:flex;gap:30px;overflow:auto;padding-bottom:20px}
+.round{display:flex;flex-direction:column;gap:16px}
+.title{background:#0f172a;color:white;font-size:11px;font-weight:bold;text-align:center;padding:4px;border-radius:6px}
+.match{background:white;border:1px solid #94a3b8;border-radius:8px;width:160px;overflow:hidden}
+.player{display:block;width:100%;padding:6px 8px;text-align:left;font-size:11px;border-bottom:1px solid #e2e8f0}
+.player:last-child{border-bottom:none}
+.player:hover{background:#e2e8f0}
+.win{background:#bbf7d0!important;font-weight:bold}
+</style>
+</head>
+<body class="p-4">
+
+<div class="bg-white rounded-xl shadow p-4 mb-4 flex gap-3 items-end flex-wrap">
+<div>
+<div class="text-xs font-bold uppercase mb-1">Počet žáků</div>
+<input id="count" type="number" value="16" min="4" max="64" class="border rounded px-3 py-2 w-24">
+</div>
+
+<button onclick="generate()" class="bg-slate-900 text-white px-4 py-2 rounded font-bold">
+Losovat turnaj
+</button>
+</div>
+
+<div class="grid xl:grid-cols-[1fr_260px] gap-4">
+
+<div class="bg-slate-100 rounded-xl p-4 overflow-auto">
+
+<div class="mb-8">
+<div class="font-black text-sm uppercase mb-3">Winners Bracket</div>
+<div id="winners" class="area"></div>
+</div>
+
+<div class="mb-8">
+<div class="font-black text-sm uppercase mb-3">Losers Bracket</div>
+<div id="losers" class="area"></div>
+</div>
+
+<div>
+<div class="font-black text-sm uppercase mb-3">Placement</div>
+<div id="placement" class="area"></div>
+</div>
+
+</div>
+
+<div class="bg-white rounded-xl border p-4">
+<h2 class="font-black text-lg mb-3">Konečné pořadí</h2>
+<div id="ranking" class="space-y-2 text-sm"></div>
+</div>
+
+</div>
+
+<script>
+let winners=[], losers=[], placement=[];
+let ranking=[];
+
+function shuffle(a){
+ for(let i=a.length-1;i>0;i--){
+  let j=Math.floor(Math.random()*(i+1));
+  [a[i],a[j]]=[a[j],a[i]];
+ }
+ return a;
+}
+
+function makeRound(players){
+ let r=[];
+ for(let i=0;i<players.length;i+=2){
+  r.push({a:players[i]||'',b:players[i+1]||'',w:''});
+ }
+ return r;
+}
+
+function generate(){
+ let n=parseInt(document.getElementById('count').value);
+ let p=[];
+ for(let i=1;i<=n;i++)p.push('Žák '+i);
+
+ shuffle(p);
+
+ winners=[]; losers=[]; placement=[]; ranking=[];
+
+ let cur=[...p];
+
+ while(cur.length>1){
+  winners.push(makeRound(cur));
+  cur=new Array(Math.ceil(cur.length/2)).fill('');
+ }
+
+ for(let i=0;i<winners.length;i++){
+  losers.push(makeRound(new Array(winners[i].length*2).fill('')));
+ }
+
+ for(let i=0;i<winners.length;i++){
+  placement.push(makeRound(new Array(winners[i].length*2).fill('')));
+ }
+
+ render();
+}
+
+function addToBracket(bracket,round,player){
+ if(!bracket[round]) return false;
+
+ for(let m of bracket[round]){
+  if(!m.a){m.a=player;return true;}
+  if(!m.b){m.b=player;return true;}
+ }
+
+ return false;
+}
+
+function winW(r,m,s){
+ let match=winners[r][m];
+ let winner=s===1?match.a:match.b;
+ let loser=s===1?match.b:match.a;
+
+ if(!winner) return;
+
+ match.w=winner;
+
+ if(winners[r+1]){
+  let nm=Math.floor(m/2);
+  if(m%2===0) winners[r+1][nm].a=winner;
+  else winners[r+1][nm].b=winner;
+ } else {
+  if(!ranking.includes(winner)) ranking.unshift(winner);
+ }
+
+ if(loser && !addToBracket(losers,r,loser)){
+   if(!ranking.includes(loser)) ranking.push(loser);
+ }
+
+ render();
+}
+
+function winL(r,m,s){
+ let match=losers[r][m];
+ let winner=s===1?match.a:match.b;
+ let loser=s===1?match.b:match.a;
+
+ if(!winner) return;
+
+ match.w=winner;
+
+ if(losers[r+1]){
+  let nm=Math.floor(m/2);
+  if(m%2===0) losers[r+1][nm].a=winner;
+  else losers[r+1][nm].b=winner;
+ } else {
+  if(!ranking.includes(winner)) ranking.push(winner);
+ }
+
+ if(loser && !addToBracket(placement,r,loser)){
+   if(!ranking.includes(loser)) ranking.push(loser);
+ }
+
+ render();
+}
+
+function winP(r,m,s){
+ let match=placement[r][m];
+ let winner=s===1?match.a:match.b;
+ let loser=s===1?match.b:match.a;
+
+ if(!winner) return;
+
+ match.w=winner;
+
+ if(placement[r+1]){
+  let nm=Math.floor(m/2);
+  if(m%2===0) placement[r+1][nm].a=winner;
+  else placement[r+1][nm].b=winner;
+ } else {
+  if(!ranking.includes(winner)) ranking.push(winner);
+ }
+
+ if(loser && !ranking.includes(loser)) ranking.push(loser);
+
+ render();
+}
+
+function draw(data,id,type){
+ let html='';
+
+ data.forEach((round,ri)=>{
+  html+=`<div class="round"><div class="title">${type} ${ri+1}</div>`;
+
+  round.forEach((m,mi)=>{
+   html+=`<div class="match">
+
+<button onclick="${type==='W'?`winW(${ri},${mi},1)`:
+type==='L'?`winL(${ri},${mi},1)`:`winP(${ri},${mi},1)`}"
+class="player ${m.w===m.a?'win':''}">
+${m.a||'---'}
+</button>
+
+<button onclick="${type==='W'?`winW(${ri},${mi},2)`:
+type==='L'?`winL(${ri},${mi},2)`:`winP(${ri},${mi},2)`}"
+class="player ${m.w===m.b?'win':''}">
+${m.b||'---'}
+</button>
+
+</div>`;
+  });
+
+  html+='</div>';
+ });
+
+ document.getElementById(id).innerHTML=html;
+}
+
+function render(){
+ draw(winners,'winners','W');
+ draw(losers,'losers','L');
+ draw(placement,'placement','P');
+
+ document.getElementById('ranking').innerHTML=
+ ranking.map((p,i)=>`
+ <div class="flex justify-between border rounded px-3 py-2 bg-slate-50">
+ <div class="font-bold">${i+1}.</div>
+ <div>${p}</div>
+ </div>`).join('');
+}
+</script>
+
+</body>
+</html>
